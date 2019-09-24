@@ -21,17 +21,19 @@ module VCAP::CloudController
       context 'simple key-test' do
         it 'complains about errors' do
           [
-            ['*', '<<*>>'],
-            ['*abc', '<<*>>abc'],
-            ['abc*', 'abc<<*>>'],
-            ['abc*=def', 'abc<<*>>=def'],
-            ['abc in (fish  ,?',     %q/abc in (fish  ,<<?>>/],
-          ].each_with_index do |pair, index|
-            input, expected_message = pair
+            ['<<*>>'],
+            ['<<*>>abc'],
+            ['abc<<*>>'],
+            ['abc<<*>>=def'],
+            [%q/abc in (fish  ,<<?>>/],
+          ].each_with_index do |augmented_input, index|
+            # debugger
+            augmented_input = augmented_input[0]
+            input = augmented_input.sub('<<', '').sub('>>', '')
             result = parser.parse(input)
             expect(result).to be_falsey
             expect(parser.errors.size).to be(1)
-            exp = "invalid label_selector: #{expected_message}"
+            exp = "invalid label_selector: #{augmented_input}"
             expect(parser.errors[0]).to eq(exp), "Expected
 [[#{exp}]], got
 [[#{parser.errors[0]}]]
@@ -40,12 +42,14 @@ for input #{index}"
         end
       end
 
-      context 'missing antecedents' do
+      context 'state table coverage' do
         it 'complains' do
           [
             ['!<<>>',                'a key'],
             ['!<<,>>',               'a key'],
-            ['!abc<<=>>',            %q/a ',' or the end/],
+            ['!<<)>>',               'a key'],
+            ['<<!=>> chips',           %q/a key or '!' not followed by '='/],
+            ['!abc<<=>>',            %q/a ',' or end/],
             ['abc=<<,>>',            'a value'],
             ['abc!=<<,>>',           'a value'],
 
@@ -66,9 +70,79 @@ for input #{index}"
             ['abc in (fish,beef),<<>>',     %q/a key or '!'/],
             ['abc in (fish,beef),<<(>>',     %q/a key or '!'/],
 
+            ['abc notin<<>>',           %q/a '('/],
+            ['abc notin <<>>',          %q/a '('/],
+            ['abc notin  <<>>',         %q/a '('/],
+            ['abc notin<<)>>',          %q/a '('/],
+            ['abc notin<<,>>',          %q/a '('/],
+
+            ['abc notin(<<>>',          'a value'],
+            ['abc notin (<<>>',         'a value'],
+            ['abc notin (fish<<>>',     %q/a ',' or ')'/],
+            ['abc notin (fish  ,<<>>',      %q/a value/],
+            ['abc notin (fish  ,<<)>>',     %q/a value/],
+
+            ['abc notin (fish,beef<<>>',     %q/a ',' or ')'/],
+            ['abc notin (fish,beef,<<>>',     %q/a value/],
+            ['abc notin (fish,beef),<<>>',     %q/a key or '!'/],
+            ['abc notin (fish,beef),<<(>>',     %q/a key or '!'/],
+
+            ['abc =<<>>',           %q/a value/],
+            ['abc = <<>>',          %q/a value/],
+            ['abc =  <<>>',         %q/a value/],
+            ['abc =<<)>>',          %q/a value/],
+            ['abc =<<,>>',          %q/a value/],
+
+            ['abc =<<(>>',          'a value'],
+            ['abc = <<(>>',         'a value'],
+            ['abc = fish  ,<<>>',      %q/a key or '!'/],
+            ['abc = fish  ,<<)>>',     %q/a key or '!'/],
+            ['abc = fish,<<>>',     %q/a key or '!'/],
+            ['abc = fish<<)>>,',     %q/a ',' or end/],
+            ['abc = fish <<(>>,',     %q/a ',' or end/],
+            ['abc = fish<<)>>,',     %q/a ',' or end/],
+            ['abc = fish <<flakes>>',     %q/a ',' or end/],
+
+            ['abc ==<<>>',           %q/a value/],
+            ['abc == <<>>',          %q/a value/],
+            ['abc ==  <<>>',         %q/a value/],
+            ['abc ==<<)>>',          %q/a value/],
+            ['abc ==<<,>>',          %q/a value/],
+
+            ['abc ==<<(>>',          'a value'],
+            ['abc == <<(>>',         'a value'],
+            ['abc == fish  ,<<>>',      %q/a key or '!'/],
+            ['abc == fish  ,<<)>>',     %q/a key or '!'/],
+            ['abc == fish,<<>>',     %q/a key or '!'/],
+            ['abc == fish<<)>>,',     %q/a ',' or end/],
+            ['abc == fish <<(>>,',     %q/a ',' or end/],
+            ['abc == fish<<)>>,',     %q/a ',' or end/],
+            ['abc == fish <<flakes>>',     %q/a ',' or end/],
+
+            ['abc !=<<>>',           %q/a value/],
+            ['abc != <<>>',          %q/a value/],
+            ['abc !=  <<>>',         %q/a value/],
+            ['abc !=<<)>>',          %q/a value/],
+            ['abc !=<<,>>',          %q/a value/],
+
+            ['abc !=<<(>>',          'a value'],
+            ['abc != <<(>>',         'a value'],
+            ['abc != fish  ,<<>>',      %q/a key or '!'/],
+            ['abc != fish  ,<<)>>',     %q/a key or '!'/],
+            ['abc != fish,<<>>',     %q/a key or '!'/],
+            ['abc != fish<<)>>,',     %q/a ',' or end/],
+            ['abc != fish <<(>>,',     %q/a ',' or end/],
+            ['abc != fish<<)>>,',     %q/a ',' or end/],
+            ['abc != fish <<flakes>>',     %q/a ',' or end/],
+
+            ['fish<<)>>,',     %q/a ',', operator, or end/],
+            ['fish <<(>>,',     %q/a ',', operator, or end/],
+            ['fish<<)>>,',     %q/a ',', operator, or end/],
+            ['fish <<flakes>>',     %q/a ',', operator, or end/],
+
           ].each_with_index do |pair, index|
             augmented_input, reduced_expected_message = pair
-            input = augmented_input.replace('<<', '').replace('>>', '')
+            input = augmented_input.sub('<<', '').sub('>>', '')
             expected_message = "#{reduced_expected_message}: #{augmented_input}"
             result = parser.parse(input)
             expect(result).to be_falsey
@@ -76,7 +150,29 @@ for input #{index}"
             expect(parser.errors[0]).to eq(expected_message), "Expected
 [[#{expected_message}]], got
 [[#{parser.errors[0]}]]
-for input #{index}"
+for input #{index} ('#{augmented_input}' => '#{input}')"
+
+          end
+        end
+      end
+
+
+      context 'state table coverage' do
+        it 'complains' do
+          [
+            ['fish <<flakes>>',     %q/a ',', operator, or end/],
+
+          ].each_with_index do |pair, index|
+            augmented_input, reduced_expected_message = pair
+            input = augmented_input.sub('<<', '').sub('>>', '')
+            expected_message = "#{reduced_expected_message}: #{augmented_input}"
+            result = parser.parse(input)
+            expect(result).to be_falsey
+            expect(parser.errors.size).to be(1)
+            expect(parser.errors[0]).to eq(expected_message), "Expected
+[[#{expected_message}]], got
+[[#{parser.errors[0]}]]
+for input #{index} ('#{augmented_input}' => '#{input}')"
 
           end
         end

@@ -44,7 +44,7 @@ module VCAP::CloudController
       end
       parts << "<<#{tok[1]}>>"
       if tok[2] + tok[1].size < s.size
-        end_part = s[(tok[2] + 1)..-1]
+        end_part = s[(tok[2] + tok[1].size)..-1]
         if end_part.size > 30
           end_part = end_part[0..27] + '...'
         end
@@ -60,17 +60,15 @@ module VCAP::CloudController
       @action_table = {
         at_start: {
           word: Proc.new {
-            debugger if !@token
             @node = LabelSelectorNode.new(@token[1]);
             @state = :has_key
           },
           not_op: :has_not_op,
+          not_equal: "a key or '!' not followed by '='",
           default: "a key or '!'",
         },
         has_not_op: {
           word: Proc.new {
-
-            debugger if !@token
             @requirements << LabelSelectorNode.new(@token[1], :not_exists);
             @state = :expecting_comma_or_eof},
           default: "a key",
@@ -83,12 +81,12 @@ module VCAP::CloudController
               @node.operator = @token[0]
               @state = :expecting_open_paren
             else
-              raise LabelSelectorParseError.new("Expecting an operator for key '#{@node.key}'", @input, @token)
+              raise LabelSelectorParseError.new("a ',', operator, or end", @input, @token)
             end
           },
           comma: Proc.new {@node.operator = :exists; @requirements << @node; @state = :at_start},
           eof: Proc.new {@node.operator = :exists; @requirements << @node; @done = true},
-          default: "a value or the end",
+          default: "a ',', operator, or end",
         },
         expect_value: {
           word: Proc.new {@node.values << @token[1]; @requirements << @node; @state = :expecting_comma_or_eof},
@@ -110,7 +108,7 @@ module VCAP::CloudController
         expecting_comma_or_eof: {
           comma: :at_start,
           eof: Proc.new {@done = true},
-          default: "a ',' or the end"
+          default: "a ',' or end"
         },
       }
     end
@@ -147,7 +145,6 @@ module VCAP::CloudController
           action = entry[tok[0]]
         end
 
-        #debugger
         case action
         when Symbol
           @state = action
